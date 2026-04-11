@@ -1,0 +1,63 @@
+# Sequence data
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+
+# Alignment files
+*.bam
+*.bam.bai
+*.sam
+
+# Sequence files
+*.fasta
+*.fa
+*.fna
+*.faa
+*.gff
+*.gbk
+
+# Archive/compressed
+*.sra
+*.tar.gz
+*.tar.bz2
+*.zip
+
+# Results (keep .gitkeep)
+**/results/*
+!**/results/.gitkeep
+
+# Workflow engines
+.snakemake/
+.nextflow/
+work/
+
+# Conda
+.conda/
+
+# Python
+__pycache__/
+.ipynb_checkpoints/
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor temp files
+*.swp
+*.swo
+*~
+.*.swp
+
+# Databases
+**/db/
+**/databases/
+
+# HPC logs
+slurm-*.out
+*.log
