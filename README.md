@@ -4,9 +4,9 @@
 
 | Member | KU-ID |
 |--------|-------|
-| _Name_ | _abc123_ |
-| _Name_ | _abc123_ |
-| _Name_ | _abc123_ |
+| Mathilde | nsq452 |
+| Emma | vwf908 |
+| Olivia | rvw283 |
 | _Name_ | _abc123_ |
 
 ## Links
