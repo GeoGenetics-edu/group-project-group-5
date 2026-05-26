@@ -1,0 +1,85 @@
+---
+title: "olivia"
+output: html_document
+---
+
+Loading the necessary packages:
+
+```{r load-packages}
+library(phyloseq)
+library(tidyverse)
+library(ape)
+library(tibble)
+library(readxl)
+```
+
+Loading the data:
+```{r load-input-files}
+species_dir <- "./data/D003093_Colitis,_Ulcerative/species/"
+genus_dir <- "./data/D003093_Colitis,_Ulcerative/genus/"
+
+otu_df <- read.delim(
+  file.path(species_dir, "otu_table.xls"),
+  check.names = FALSE
+)
+
+tax_df <- read.delim(
+  file.path(species_dir, "tax_table.xls"),
+  check.names = FALSE
+)
+
+sample_df <- read.delim(
+  file.path(species_dir, "sample_data.xls"),
+  check.names = FALSE
+)
+
+
+head(sample_df)
+```
+
+Creating tree:
+```{r}
+tree <- ape::read.tree(file.path(species_dir, "tree.nwk"))
+```
+
+
+Preparing phyloseq input:
+```{r prepare-phyloseq-inputs}
+otu_mat <- otu_df %>%
+  column_to_rownames("featureid") %>%
+  as.matrix()
+
+tax_mat <- tax_df %>%
+  column_to_rownames("#featureid") %>%
+  as.matrix()
+
+sample_tab <- sample_df %>%
+  column_to_rownames("#SampleID")
+```
+
+Creating the phyloseq object:
+```{r}
+ps <- phyloseq(
+  otu_table(otu_mat, taxa_are_rows = TRUE),
+  tax_table(tax_mat),
+  sample_data(sample_tab),
+  phy_tree(tree)
+)
+
+ps
+```
+
+Making it a long format:
+```{r}
+ps_long <- psmelt(ps)
+head(ps_long)
+```
+
+```{r}
+disease_1 <- subset_samples(
+  ps,
+  Disease.name ==1)
+
+disease_1
+```
+
