@@ -69,3 +69,18 @@ ps <- phyloseq(
 ps
 ```
 
+Making it a long format:
+```{r}
+ps_long <- psmelt(ps)
+head(ps_long)
+```
+
+```{r}
+ps_ <- subset_samples(
+  ps,
+  body_site %in% c("gut_adult", "gut_infant")
+)
+
+ps_gut
+```
+
