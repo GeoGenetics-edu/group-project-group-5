@@ -2,6 +2,7 @@
 title: "Testrun"
 output: html_document
 ---
+<<<<<<< HEAD
 
 ```{r}
 library(phyloseq)
@@ -99,3 +100,5 @@ plot_richness(
 )
 ```
 
+=======
+>>>>>>> 9b05ece507410af7d30b8a78cc1731aad6871565
