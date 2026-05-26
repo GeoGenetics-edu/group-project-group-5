@@ -34,7 +34,7 @@ sample_df <- read.delim(
 )
 
 
-head(sample_df)
+head(otu_df)
 ```
 
 Creating tree:
@@ -76,10 +76,37 @@ head(ps_long)
 ```
 
 ```{r}
-disease_1 <- subset_samples(
+disease_ID <- subset_samples(
   ps,
-  Disease.name ==1)
+  Disease.MESH.ID =="D003093")
+```
 
-disease_1
+Taxanomic rank:
+```{r}
+ps_genus <- tax_glom(ps,
+                     taxrank = "Genus",
+                     NArm = TRUE)
+
+taxa_names(ps_genus) <- make.unique(
+  as.character(tax_table(ps_genus)[, "Genus"])
+)
+
+#tax_table(ps_genus)
+```
+
+```{r}
+ps_genus <- tax_glom(ps,
+                     taxrank = "Species",
+                     NArm = TRUE)
+
+taxa_names(ps_genus) <- make.unique(
+  as.character(tax_table(ps_genus)[, "Species"])
+)
+
+#tax_table(ps_genus)
+```
+
+```{r}
+plot_bar(ps, fill = "Phylum")
 ```
 
