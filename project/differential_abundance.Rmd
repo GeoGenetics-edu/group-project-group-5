@@ -1,8 +1,5 @@
 ---
-title: "Differential abundance analysis of microbiome data"
-author: "Antton Alberdi"
-email: "antton.alberdi@sund.ku.dk"
-date: "`r Sys.Date()`"
+title: "Differential abundance analysis - test"
 output:
   html_document:
     toc: true
@@ -54,13 +51,55 @@ library(broom.mixed)
 Details: [1. Load and Inspect the Data][wiki-load]. Load the saved `phyloseq` object, derive the practical metadata variables, and confirm that the abundance table, taxonomy table and sample metadata are present.
 
 ```{r}
-ps <- readRDS("../data/phyloseq_augmented_v3.rds")
+species_dir <- "./data/D003093_Colitis,_Ulcerative/species/"
+genus_dir <- "./data/D003093_Colitis,_Ulcerative/genus/"
+
+otu_df <- read.delim(
+  file.path(species_dir, "otu_table.xls"),
+  check.names = FALSE
+)
+
+tax_df <- read.delim(
+  file.path(species_dir, "tax_table.xls"),
+  check.names = FALSE
+)
+
+sample_df <- read.delim(
+  file.path(species_dir, "sample_data.xls"),
+  check.names = FALSE
+)
+
+tree <- ape::read.tree(file.path(species_dir, "tree.nwk"))
+
+otu_mat <- otu_df %>%
+  column_to_rownames("featureid") %>%
+  as.matrix()
+
+tax_mat <- tax_df %>%
+  column_to_rownames("#featureid") %>%
+  as.matrix()
+
+sample_tab <- sample_df %>%
+  column_to_rownames("#SampleID")
+
+```
+
+Phyloseq object:
+```{r}
+ps <- phyloseq(
+  otu_table(otu_mat, taxa_are_rows = TRUE),
+  tax_table(tax_mat),
+  sample_data(sample_tab),
+  phy_tree(tree)
+)
 
 ps
 sample_data(ps)
 rank_names(ps)
 sample_variables(ps)
 ```
+
+
 Check that the expected metadata variables are present, especially `body_site`, `age` and `status`.
 
 ## Visualise community composition
@@ -73,10 +112,10 @@ otu_rel <- as(otu_table(ps_rel), "matrix") %>% t() %>% as.data.frame()
 meta_rel <- as(sample_data(ps_rel), "matrix") %>% as.data.frame()
 tax_rel <- as(tax_table(ps_rel), "matrix") %>% as.data.frame()
 
-ps_genus <- tax_glom(ps_rel, taxrank = "genus")
+ps_genus <- tax_glom(ps_rel, taxrank = "Genus")
 
-plot_bar(ps_genus, fill = "genus") +
-  facet_nested(~ body_site + age + status, scales = "free_x") +
+plot_bar(ps_genus, fill = "Genus") +
+  facet_nested(~ Recent.antibiotics.use + Country, scales = "free_x") +
   theme_bw() +
   theme(axis.text.x = element_blank())
 ```
@@ -86,9 +125,9 @@ The hidden chunk below creates `dat_rel`, the long relative-abundance table used
 
 ```{r, include=FALSE}
 dat_rel <- otu_rel %>%
-  rownames_to_column("sample_id") %>%
-  pivot_longer(-sample_id, names_to = "taxon", values_to = "rel_abund") %>%
-  left_join(meta_rel %>% as("data.frame") %>% rownames_to_column("sample_id"), by = "sample_id") %>%
+  rownames_to_column("Sample") %>%
+  pivot_longer(-Sample, names_to = "taxon", values_to = "rel_abund") %>%
+  left_join(meta_rel %>% as("data.frame") %>% rownames_to_column("Sample"), by = "Sample") %>%
   left_join(tax_rel %>% rownames_to_column("taxon"), by = "taxon")
 ```
 
@@ -108,7 +147,7 @@ one_taxon <- dat_rel$taxon[3]
 # Comparison between body sites
 dat_rel %>%
   filter(taxon == one_taxon) %>%
-  ggplot(aes(x = body_site, y = rel_abund, fill = body_site)) +
+  ggplot(aes(x = Country, y = rel_abund, fill = Country)) +
     geom_boxplot(outlier.shape = NA) +
     geom_jitter(width = 0.15) +
     theme_bw()
@@ -116,8 +155,7 @@ dat_rel %>%
 # Comparison between ages within gut samples
 dat_rel %>%
   filter(taxon == one_taxon) %>%
-  filter(body_site == "gut") %>%
-  ggplot(aes(x = age, y = rel_abund, fill = body_site)) +
+  ggplot(aes(x = Recent.antibiotics.use, y = rel_abund, fill = Country)) +
     geom_boxplot(outlier.shape = NA) +
     geom_jitter(width = 0.15) +
     theme_bw()
@@ -130,7 +168,6 @@ Details: [4. Diagnose the Data Before Testing][wiki-diagnose]. The next three ch
 
 ```{r}
 dat_rel %>%
-  filter(body_site == "gut") %>%
   group_by(taxon) %>%
   summarise(prop_zero = mean(rel_abund == 0), .groups = "drop") %>%
   ggplot(aes(x = prop_zero)) +
@@ -145,16 +182,15 @@ High zero proportions mean many taxa have limited information for per-taxon test
 ```{r}
 set.seed(42)
 example_taxa <- dat_rel %>%
-  filter(body_site == "gut") %>%
-  group_by(taxon, genus, species) %>%
+  group_by(taxon, Genus, Species) %>%
   summarise(prop_nonzero = mean(rel_abund > 0), .groups = "drop") %>%
   filter(prop_nonzero > 0.4, prop_nonzero < 0.9) %>%
   slice_sample(n = 6) %>%
   pull(taxon)
 
 dat_rel %>%
-  filter(body_site == "gut", taxon %in% example_taxa, rel_abund > 0) %>%
-  mutate(label = species) %>%
+  filter(taxon %in% example_taxa, rel_abund > 0) %>%
+  mutate(label = Species) %>%
   ggplot(aes(x = rel_abund)) +
     geom_histogram(bins = 20, fill = "steelblue", color = "white") +
     facet_wrap(~ label, scales = "free") +
@@ -167,8 +203,8 @@ Use these histograms to see whether non-zero abundances are dominated by a few h
 
 ```{r}
 dat_rel %>%
-  filter(body_site == "gut", taxon %in% example_taxa) %>%
-  mutate(label = species) %>%
+  filter(taxon %in% example_taxa) %>%
+  mutate(label = Species) %>%
   ggplot(aes(sample = rel_abund)) +
     stat_qq(size = 0.8, alpha = 0.6) +
     stat_qq_line(color = "red", linetype = "dashed") +
@@ -186,13 +222,12 @@ Details: [5. Wilcoxon Rank-Sum Test][wiki-wilcoxon]. This chunk runs one Wilcoxo
 
 ```{r}
 wilcox_results <- dat_rel %>%
-  filter(body_site == "gut") %>%
-  group_by(taxon, genus, species) %>%
+  group_by(taxon, Genus, Species) %>%
   summarise(
-    p_value = wilcox.test(rel_abund ~ age, exact = FALSE)$p.value,
-    mean_adult = mean(rel_abund[age == "adult"]),
-    mean_infant = mean(rel_abund[age == "infant"]),
-    log2_fc = log2((mean_adult + 1e-6) / (mean_infant + 1e-6)),
+    p_value = wilcox.test(rel_abund ~ Country, exact = FALSE)$p.value,
+    mean_dk = mean(rel_abund[Country == "Denmark"]),
+    mean_usa = mean(rel_abund[Country == "United States of America"]),
+    log2_fc = log2((mean_dk + 1e-6) / (mean_usa + 1e-6)),
     .groups = "drop"
   ) %>%
   mutate(q_value = p.adjust(p_value, method = "BH"))
