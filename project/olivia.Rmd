@@ -11,6 +11,7 @@ library(tidyverse)
 library(ape)
 library(tibble)
 library(readxl)
+library("ggplot2"); packageVersion("ggplot2")
 ```
 
 Loading the data:
@@ -108,5 +109,202 @@ taxa_names(ps_genus) <- make.unique(
 
 ```{r}
 plot_bar(ps, fill = "Phylum")
+```
+
+Plot heatmap for subsets of age:
+```{r}
+ps_female <- subset_samples(ps, Sex == "Female")
+ps_male <- subset_samples(ps, Sex == "Male")
+
+plot_heatmap(ps_female)
+
+plot_heatmap(ps_male)
+```
+
+Plot heatmaps for subsets of recent antibiotics use:
+```{r}
+ps_ab_y <- subset_samples(ps, Recent.antibiotics.use == "Y")
+ps_ab_n <- subset_samples(ps, Recent.antibiotics.use == "N")
+
+plot_heatmap(ps_ab_n)
+
+plot_heatmap(ps_ab_y)
+```
+
+<https://joey711.github.io/phyloseq/index.html>
+
+Filtering low-abundance taxa or low-depth samples:
+```{r}
+
+```
+
+
+Agglomerating at different taxonomic ranks and comparing plots:
+```{r}
+
+```
+
+Shannon richness:
+```{r}
+shannon <- estimate_richness(
+  ps,
+  measures = "Shannon"
+)
+
+head(shannon)
+```
+
+Comparing richness plots:
+```{r}
+plot_richness(
+  ps,
+  measures = "Shannon"
+)
+
+plot_richness(
+  ps,
+  measures = "Shannon",
+  x = "Country"
+)
+
+plot_richness(
+  ps,
+  measures = "Shannon",
+  x = "Sex"
+)
+
+plot_richness(
+  ps,
+  measures = "Shannon",
+  x = "Host.age"
+)
+
+plot_richness(
+  ps,
+  measures = "Shannon",
+  x = "Recent.antibiotics.use"
+)
+
+```
+
+```{r}
+plot_richness(
+  ps,
+  measures = "Shannon",
+  x = "Country",
+  color = "Recent.antibiotics.use"
+  )
+
+plot_richness(
+  ps,
+  measures = "Shannon",
+  x = "Host.age",
+  color = "Recent.antibiotics.use"
+  )
+
+plot_richness(
+  ps,
+  measures = "Shannon",
+  x = "Sex",
+  color = "Recent.antibiotics.use"
+  )
+```
+
+Observed richness:
+```{r}
+ps_pa <- transform_sample_counts(ps, function(x) {ifelse(x > 0, 1, 0)})
+
+observed <- estimate_richness(
+  ps_pa,
+  measures = "Observed"
+)
+
+head(observed)
+```
+
+Building an alpha-diversity table:
+```{r}
+shannon <- estimate_richness(
+  ps,
+  measures = "Shannon"
+) %>%
+  rownames_to_column("Sample")
+
+# Calculate observed richness
+observed <- estimate_richness(
+  ps_pa,
+  measures = "Observed"
+) %>%
+  rownames_to_column("Sample")
+
+# Extract sample metadata
+sample_df <- sample_data(ps) %>%
+  data.frame() %>%
+  rownames_to_column("Sample")
+
+# Combine diversity estimates and metadata
+alpha_diversity <- inner_join(
+  shannon,
+  observed,
+  by = "Sample"
+) %>%
+  inner_join(
+    sample_df,
+    by = "Sample"
+  )
+
+head(alpha_diversity)
+```
+
+Kruskal-Shannon test:
+```{r}
+# Country, Sex, Recent.antibiotics.use, Host.age
+kruskal_shannon <- kruskal.test(
+  Shannon ~ Recent.antibiotics.use,
+  data = alpha_diversity
+)
+
+kruskal_shannon
+```
+
+Shannon box-plot:
+```{r}
+ggplot(alpha_diversity, aes(x = Recent.antibiotics.use, y = Shannon)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2) +
+  theme_bw()
+
+ggplot(alpha_diversity, aes(x = Sex, y = Shannon)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2) +
+  theme_bw()
+
+ggplot(alpha_diversity, aes(x = Country, y = Shannon)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2) +
+  theme_bw()
+```
+
+Total abundance per sample:
+```{r}
+sample_depth <- sample_sums(ps)
+
+alpha_diversity$reads <- sample_depth[
+  alpha_diversity$Sample
+]
+
+ggplot(alpha_diversity, aes(x = reads, y = Shannon)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_bw()
+```
+
+Correlations test:
+```{r}
+cor.test(
+  alpha_diversity$reads,
+  alpha_diversity$Shannon,
+  method = "spearman"
+)
 ```
 
