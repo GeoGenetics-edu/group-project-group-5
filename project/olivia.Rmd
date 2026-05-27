@@ -11,7 +11,8 @@ library(tidyverse)
 library(ape)
 library(tibble)
 library(readxl)
-library("ggplot2"); packageVersion("ggplot2")
+library(vegan)
+library(ggplot2)
 ```
 
 Loading the data:
@@ -306,5 +307,87 @@ cor.test(
   alpha_diversity$Shannon,
   method = "spearman"
 )
+```
+Relative abundance:
+```{r}
+ps_rel <- transform_sample_counts(
+  ps,
+  function(x) x / sum(x)
+)
+
+#sample_sums(ps_rel)
+```
+
+Bray-Curtis and jaccard distance:
+```{r}
+bray_dist <- distance(
+  ps_rel,
+  method = "bray"
+)
+
+jaccard_dist <- distance(
+  ps_pa,
+  method = "jaccard"
+)
+
+# bray_dist
+
+# jaccard_dist
+```
+
+Ordination based on bray-Curtis distance:
+```{r}
+ord_bray <- ordinate(
+  ps_rel,
+  method = "PCoA",
+  distance = bray_dist
+)
+
+plot_ordination(
+  ps_rel,
+  ord_bray,
+  type = "samples",
+  color = "Country" # Recent.antibiotics.use, Sex, Host.age, Country
+)
+
+plot_ordination(
+  ps_rel,
+  ord_bray,
+  type = "samples",
+  color = "Recent.antibiotics.use" # Recent.antibiotics.use, Sex, Host.age, Country
+)
+```
+
+```{r}
+plot_scree(ord_bray)
+```
+
+Ordination data frame:
+```{r}
+ord_bray_df <- plot_ordination(
+  ps_rel,
+  ord_bray,
+  type = "samples",
+  justDF = TRUE
+)
+
+head(ord_bray_df)
+```
+
+Plot ordinations:
+```{r}
+ggplot(ord_bray_df, aes(x = Axis.1, y = Axis.2, color = Country)) +
+  geom_point(size = 3) +
+  theme_bw()
+```
+
+NMDS ordination and plot:
+```{r}
+
+```
+
+PCOA with jaccard distance:
+```{r}
+
 ```
 
