@@ -20,14 +20,20 @@ library(janitor)
 
 
 ```{r Load configuration and dependencies}
-setwd("~/NBIB25004U-Metagenomics-2026/Week_21")
+species_dir <- "./data/D003093_Colitis,_Ulcerative/species/"
+genus_dir <- "./data/D003093_Colitis,_Ulcerative/genus/"
+
+setwd(species_dir)
+
 script_file <- commandArgs(trailingOnly = FALSE)
 script_file <- sub("^--file=", "", script_file[grep("^--file=", script_file)])
+
 if (length(script_file) == 1) {
   base_dir <- normalizePath(dirname(script_file), winslash = "/", mustWork = TRUE)
 } else {
   base_dir <- getwd()
 }
+
 source(file.path(base_dir, "config.R"))
 ```
 
