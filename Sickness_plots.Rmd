@@ -1,0 +1,147 @@
+---
+title: "testing"
+output: html_document
+date: "2026-05-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(phyloseq)
+library(vegan)
+library(dplyr)
+library(tibble)
+library(purrr)
+library(stringr)
+library(ggplot2)
+library(tidyverse)
+library(ggh4x)
+library(lme4)
+library(lmerTest)
+library(broom.mixed)
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("microbiome")
+library(microbiome)
+
+library(biomformat)
+```
+
+
+```{r}
+
+# 1. Fortæl R at bruge dit rigtige objekt (pylsq), men kalde det 'ps'
+ps <- pylsq
+
+sample_data(ps)$Disease.MESH.ID <- factor(
+  sample_data(ps)$Disease.MESH.ID, 
+  levels = c("D003093", "D006262"), 
+  labels = c("Ulcerative Colitis", "Healthy Control")
+)
+
+# 2. Transformér til relativ overflod (procent) til brug i graferne
+ps_rel <- transform_sample_counts(ps, function(x) x / sum(x))
+
+
+# ------------------------------------------------------------------------------
+# TRIN 1: Det geografiske overblik (PCoA-plot)
+# ------------------------------------------------------------------------------
+ord_bc <- ordinate(ps_rel, method = "PCoA", distance = "bray")
+
+plot_ordination(ps_rel, ord_bc, color = "Country") +
+  geom_point(size = 3, alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "PCoA: Er der geografisk forskel på mikrobiomet?",
+       subtitle = "Baseret på Bray-Curtis afstand (Genus-niveau)",
+       color = "Land")
+```
+
+```{r}
+# ------------------------------------------------------------------------------
+# TRIN 2: Sygdom vs. Sundhed opdelt på lande
+# ------------------------------------------------------------------------------
+plot_ordination(ps_rel, ord_bc, color = "Disease.MESH.ID") +
+  geom_point(size = 3, alpha = 0.7) +
+  facet_wrap(~Country) +
+  theme_minimal() +
+  labs(title = "PCoA: Sygdomseffekt (Ulcerativ Colitis) opdelt på lande",
+       subtitle = "Ser de syges mikrobiom ens ud på tværs af geografi?",
+       color = "Status")
+```
+
+
+```{r}
+top20_genera <- names(sort(taxa_sums(ps_rel), decreasing = TRUE)[1:20])
+ps_top20 <- prune_taxa(top20_genera, ps_rel)
+
+plot_bar(ps_top20, fill = "Genus") +
+  geom_bar(stat="identity", color=NA) +  # FJERNER DE SORTE KANTER!
+  facet_grid(Disease.MESH.ID ~ Country, scales = "free_x") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(), 
+        legend.position = "bottom") +
+  labs(x = "Patienter / Testpersoner", y = "Relativ overflod (Procent)",
+       title = "Top 20 dominerende bakterieslægter",
+       subtitle = "Opdelt efter land (kolonner) og sygdomsstatus (rækker)")
+```
+
+```{r}
+ps %>% 
+  sample_data() %>% 
+  as.data.frame() %>% 
+  count(Country)
+```
+```{r}
+# Lav et søjlediagram over antal testpersoner per land
+ps %>% 
+  sample_data() %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = Country, fill = Country)) +
+  geom_bar() +
+  geom_text(stat='count', aes(label=..count..), vroom = TRUE, vjust = -0.5) + # Sætter tal ovenpå søjlerne
+  theme_minimal() +
+  labs(x = "Land", y = "Antal testpersoner", 
+       title = "Fordeling af studiets testpersoner",
+       subtitle = "Opdelt på geografisk oprindelse") +
+  theme(legend.position = "none") # Skjuler legenden, da landene allerede står på x-aksen
+```
+```{r}
+# Tæl hvor mange raske/syge der er i hvert land
+ps %>% 
+  sample_data() %>% 
+  group_by(Country, Disease.name) %>%
+  count(Country, Disease.name)
+```
+```{r}
+ps %>%
+  sample_data() %>%
+  group_by(Country) %>%
+  summarise(count = n())
+  
+```
+
+
