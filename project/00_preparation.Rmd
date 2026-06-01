@@ -18,23 +18,21 @@ library(dplyr)
 library(janitor)
 ```
 
-
 ```{r Load configuration and dependencies}
-species_dir <- "./data/D003093_Colitis,_Ulcerative/species/"
-genus_dir <- "./data/D003093_Colitis,_Ulcerative/genus/"
-
-setwd(species_dir)
-
-script_file <- commandArgs(trailingOnly = FALSE)
-script_file <- sub("^--file=", "", script_file[grep("^--file=", script_file)])
-
-if (length(script_file) == 1) {
-  base_dir <- normalizePath(dirname(script_file), winslash = "/", mustWork = TRUE)
-} else {
-  base_dir <- getwd()
-}
-
 source(file.path(base_dir, "config.R"))
+
+otu <- read.delim(
+  file.path(data_dir, "otu_table.xls"),
+  sep = "\t",
+  header = TRUE,
+  check.names = FALSE
+)
+metadata <- read.delim(
+  file.path(data_dir, "sample_data.xls"),
+  sep = "\t",
+  header = TRUE,
+  check.names = FALSE
+)
 ```
 
 
@@ -46,40 +44,44 @@ dir.create(figures_dir, recursive = TRUE, showWarnings = FALSE)
 
 
 ```{r Setup Logging and Seed}
-log_file <- file.path(logs_dir, "01_data_preparation.log")
-sink(log_file, append = FALSE, split = TRUE)
-set.seed(seed)
+library(tibble)
 
-cat("Starting Data Preparation Phase...\n")
-cat("Using random seed:", seed, "\n")
+otu <- otu %>%
+  column_to_rownames("featureid")
+
+otu <- as.data.frame(t(otu))
+otu$sample_id <- rownames(otu)
 
 ```
+
+```{r}
+head(otu)
+```
+
 
 # 1. Cleaning Names and Columns
 # Novice Tip: Special characters or spaces in column names can break R functions.
 # We use janitor::clean_names() to ensure all headers are snake_case and ASCII-safe.
 ```{r}
-cat("Step 1: Cleaning column names...\n")
-cleaned_data <- raw_data %>%
-  clean_names()
-
-if (!"dx" %in% names(cleaned_data)) {
-  stop("Error: expected outcome column `dx` was not found after cleaning names.")
-}
+cleaned_data <- metadata %>%
+  inner_join(otu, by = "feature_id")
 ```
+
+```{r}
+cleaned_data$dx <- as.factor(cleaned_data$dx)
+```
+
 
 # 2. Standardizing Feature Data Types
 # Novice Tip: Models require numeric inputs. We ensure all OTU columns are numeric.
 # In this example dataset they already are, but we apply this as a best practice.
 # We leave dx as character because mikropml handles outcome conversion internally.
 ```{r}
-cat("Step 2: Ensuring numeric data types for features...\n")
 cleaned_data <- cleaned_data %>%
-  mutate(across(-dx, as.numeric))
+  janitor::clean_names()
 
-# Learned preprocessing such as scaling, near-zero variance filtering, and
-# correlation filtering is handled inside model training to avoid data leakage.
-cat("Step 3: Deferring learned preprocessing to model training...\n")
+cleaned_data <- cleaned_data %>%
+  mutate(across(-SampleID, as.numeric))
 ```
 
 

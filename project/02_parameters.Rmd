@@ -25,10 +25,9 @@ library(caret)
 
 # Load configuration and dependencies
 ```{r}
-species_dir <- "./data/D003093_Colitis,_Ulcerative/species/"
-genus_dir <- "./data/D003093_Colitis,_Ulcerative/genus/"
+file_path <- "./data/D003093_Colitis,_Ulcerative/genus/"
 
-setwd(species_dir)
+setwd(file_path)
 
 script_file <- commandArgs(trailingOnly = FALSE)
 script_file <- sub("^--file=", "", script_file[grep("^--file=", script_file)])
