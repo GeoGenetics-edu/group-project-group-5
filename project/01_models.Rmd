@@ -3,3 +3,172 @@ title: "01_models"
 output: html_document
 ---
 
+Importing the libraries
+```{r}
+library(mikropml)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+```
+
+Loading the preprocessed dataset and filtering
+```{r}
+input_file <- file.path(data_dir, "prepared_data_final.rds")
+dat <- readRDS(input_file)
+
+# outcome first
+dat$dx <- factor(dat$dx)
+
+# keep only the OTU columns (numeric features)
+otu_cols <- grep("^\\d|^OTU|^err|^srr", names(dat), value = TRUE)
+
+dat <- dat %>%
+  select(dx, all_of(otu_cols))
+
+# force numeric safety
+dat <- dat %>%
+  mutate(across(-dx, as.numeric))
+
+# remove NA rows
+dat <- na.omit(dat)
+
+table(dat$dx)
+```
+
+...
+```{r}
+model_preprocess <- c("nzv", "corr", "center", "scale")
+```
+
+Checking the data structure
+```{r}
+cat("Outcome distribution:\n")
+print(table(dat$dx))
+
+cat("Missing values:\n")
+print(sum(is.na(dat)))
+```
+
+Linear model
+```{r}
+results_glmnet <- run_ml(
+  dataset = dat,
+  method = "glmnet",
+  outcome_colname = "dx",
+  seed = seed,
+  preProcess = model_preprocess,
+  cv_times = 2 # Change cross validation?
+)
+```
+
+Random Forest
+```{r}
+results_rf <- run_ml(
+  dataset = dat,
+  method = "rf",
+  outcome_colname = "dx",
+  seed = seed,
+  preProcess = model_preprocess,
+  cv_times = 2 # Reduced for the tutorial run
+)
+```
+
+Checking the resutls
+```{r}
+cat("\n--- Training Results Summary ---\n")
+cat("GLMNET Performance (Internal CV AUC):", results_glmnet$performance$cv_metric_AUC, "\n")
+cat("GLMNET Performance (Test Set AUC):", results_glmnet$performance$AUC, "\n")
+cat("\nRF Performance (Internal CV AUC):", results_rf$performance$cv_metric_AUC, "\n")
+cat("RF Performance (Test Set AUC):", results_rf$performance$AUC, "\n")
+```
+
+Combining the results...
+```{r}
+model_list <- list(
+  glmnet = results_glmnet,
+  rf = results_rf
+)
+
+fix_perf_types <- function(df) {
+  df %>%
+    mutate(across(where(is.character) & !c(method), as.numeric))
+}
+
+perf_glmnet <- fix_perf_types(model_list$glmnet$performance)
+perf_rf <- fix_perf_types(model_list$rf$performance)
+
+combined_perf <- bind_rows(perf_glmnet, perf_rf)
+
+colnames(combined_perf) <- tolower(colnames(combined_perf))
+```
+
+Selecting the needed results for comparison
+```{r}
+print(
+  combined_perf %>%
+  select(method, cv_metric_auc, accuracy, mean_f1)
+)
+```
+
+Combining the results for comparison
+```{r}
+perf_long <- combined_perf %>%
+  select(method, cv_metric_auc, accuracy, mean_f1) %>% #prAUC,
+  pivot_longer(-method, names_to = "metric", values_to = "value")
+
+p_comp <- ggplot(perf_long, aes(x = method, y = value, fill = method)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~metric, scales = "free_y") +
+  theme_bw() +
+  labs(title = "Model Performance Comparison", 
+       subtitle = "Higher values indicate better performance",
+       y = "Score", x = "ML Method") +
+  scale_fill_brewer(palette = "Set1")
+
+p_comp
+```
+
+Creating helper functions
+```{r}
+# Helper function to get sens/spec for plotting
+get_curves_data <- function(result, method_name) {
+  calc_model_sensspec(result$trained_model, result$test_data, "dx") %>%
+    mutate(method = method_name)
+}
+
+roc_prc_glmnet <- get_curves_data(model_list$glmnet, "glmnet")
+roc_prc_rf <- get_curves_data(model_list$rf, "rf")
+combined_curves <- bind_rows(roc_prc_glmnet, roc_prc_rf)
+```
+
+Creating the ROC curve
+```{r}
+p_roc <- combined_curves %>%
+  ggplot(aes(x = specificity, y = sensitivity, color = method)) +
+  geom_line(linewidth = 1) +
+  geom_abline(intercept = 1, slope = 1, linetype = "dashed", color = "grey") +
+  scale_x_reverse() +
+  theme_bw() +
+  coord_fixed() +
+  labs(title = "Receiver Operating Characteristic (ROC) Curve",
+       x = "Specificity (False Positive Rate)",
+       y = "Sensitivity (True Positive Rate)")
+
+p_roc
+```
+
+Creating the PRC curve
+```{r}
+p_prc <- combined_curves %>%
+  rename(recall = sensitivity) %>%
+  ggplot(aes(x = recall, y = precision, color = method)) +
+  geom_line(linewidth = 1) +
+  theme_bw() +
+  coord_fixed() +
+  labs(title = "Precision-Recall Curve (PRC)",
+       x = "Recall (Sensitivity)",
+       y = "Precision")
+
+p_prc
+```
+
