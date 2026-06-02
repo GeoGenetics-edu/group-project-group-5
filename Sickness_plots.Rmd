@@ -73,6 +73,7 @@ plot_ordination(ps_rel, ord_bc, color = "Country") +
 # ------------------------------------------------------------------------------
 ord_bc <- ordinate(ps_rel, method = "PCoA", distance = "bray")
 
+
 # Plot med MESH ID som farve og den manuelle farveskala, der oversætter koderne
 plot_ordination(ps_rel, ord_bc, color = "Disease.MESH.ID") +
   geom_point(size = 3, alpha = 0.7) +
@@ -147,6 +148,64 @@ ps %>%
        title = "Distribution of the study's test subjects") +
   theme(legend.position = "none")
 ```
+```{r}
+# ==============================================================================
+# STATISTISK TEST: PERMANOVA & BETADISPER (RETTET & SKUDSIKKER VERSION)
+# ==============================================================================
+
+# --- 1. GLOBALE ANALYSER (Hele datasættet) ---
+
+# Rens for tomme prøver og tomme bakterieslægter globalt
+ps_global_clean <- prune_samples(sample_sums(ps_rel) > 0, ps_rel)
+ps_global_clean <- prune_taxa(taxa_sums(ps_global_clean) > 0, ps_global_clean)
+
+# Træk data ud til global test
+bray_dist_global <- distance(ps_global_clean, method = "bray")
+bakterie_global  <- as(otu_table(ps_global_clean), "matrix")
+if(taxa_are_rows(ps_global_clean)) { bakterie_global <- t(bakterie_global) }
+metadata_global  <- data.frame(as(sample_data(ps_global_clean), "data.frame"))
+
+# Kør Global PERMANOVA
+permanova_global <- adonis2(bakterie_global ~ Country + Disease.MESH.ID, 
+                            data = metadata_global, 
+                            method = "bray")
+
+print("--- GLOBAL PERMANOVA TEST ---")
+print(permanova_global)
+
+# Kør Global Betadisper (med type = "centroid" for at undgå 'out of bounds' fejl)
+print("--- GLOBAL DISPERSION TEST: COUNTRY ---")
+disp_global_country <- betadisper(bray_dist_global, metadata_global$Country, type = "centroid")
+print(anova(disp_global_country))
+
+print("--- GLOBAL DISPERSION TEST: DISEASE ---")
+disp_global_disease <- betadisper(bray_dist_global, metadata_global$Disease.MESH.ID, type = "centroid")
+print(anova(disp_global_disease))
+
+
+```
+
+```{r}
+# ------------------------------------------------------------------------------
+# --- TEST 1: GLOBAL TEST (Hele datasættet) ---
+# ------------------------------------------------------------------------------
+permanova_global <- adonis2(bakterie_global ~ Country + Disease.MESH.ID, 
+                            data = metadata_global, 
+                            method = "bray")
+
+print("--- GLOBAL PERMANOVA TEST ---")
+print(permanova_global)
+
+print("--- GLOBAL DISPERSION TEST: COUNTRY ---")
+disp_global_country <- betadisper(bray_dist_global, metadata_global$Country)
+print(anova(disp_global_country))
+
+print("--- GLOBAL DISPERSION TEST: DISEASE ---")
+disp_global_disease <- betadisper(bray_dist_global, metadata_global$Disease.MESH.ID)
+print(anova(disp_global_disease))
+
+```
+
 
 ```{r}
 # ==============================================================================
@@ -173,24 +232,6 @@ print("--- GLOBAL PERMANOVA TEST ---")
 print(permanova_global)
 
 ```
-```{r}
-# --- TEST 2: KUN USA ---
-# Vi filtrerer data, så vi kun tester sygdomseffekten i USA
-ps_usa <- subset_samples(ps_rel, Country == "United States of America")
-bakterie_usa <- as(otu_table(ps_usa), "matrix")
-if(taxa_are_rows(ps_usa)) {
-  bakterie_usa <- t(bakterie_usa)
-}
 
-# Skudsikker konvertering af USA-metadata
-metadata_usa <- data.frame(as(sample_data(ps_usa), "data.frame"))
-
-permanova_usa <- adonis2(bakterie_usa ~ Disease.MESH.ID, 
-                         data = metadata_usa, 
-                         method = "bray")
-
-print("--- USA PERMANOVA TEST ---")
-print(permanova_usa)
-```
 
 
