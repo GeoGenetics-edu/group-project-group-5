@@ -26,19 +26,6 @@ library(tidyr)
 
 # Load configuration and dependencies
 ```{r}
-file_path <- "./data/D003093_Colitis,_Ulcerative/genus/"
-
-setwd(file_path)
-
-script_file <- commandArgs(trailingOnly = FALSE)
-script_file <- sub("^--file=", "", script_file[grep("^--file=", script_file)])
-
-if (length(script_file) == 1) {
-  base_dir <- normalizePath(dirname(script_file), winslash = "/", mustWork = TRUE)
-} else {
-  base_dir <- getwd()
-}
-
 source(file.path(base_dir, "config.R"))
 ```
 
@@ -59,13 +46,29 @@ cat("Parallel processing enabled with", n_cores, "cores.\n")
 ```
 
 ```{r}
-# 1. Load Prepared Data
-input_file <- file.path(results_dir, "prepared_data.rds")
-if (!file.exists(input_file)) {
-  stop("Error: prepared_data.rds not found. Run 01_data_preparation.R first.")
-}
+input_file <- file.path(results_dir, "prepared_data_final.rds")
 dat <- readRDS(input_file)
+
+# outcome first
+dat$dx <- factor(dat$dx)
+
+# keep ONLY OTU columns (numeric features)
+otu_cols <- grep("^\\d|^OTU|^err|^srr", names(dat), value = TRUE)
+
+dat <- dat %>%
+  select(dx, all_of(otu_cols))
+
+# force numeric safety
+dat <- dat %>%
+  mutate(across(-dx, as.numeric))
+
+# remove NA rows safely
+dat <- na.omit(dat)
+
+table(dat$dx)
 ```
+
+
 
 ```{r}
 # 2. Leakage-safe learned preprocessing
@@ -74,6 +77,23 @@ dat <- readRDS(input_file)
 model_preprocess <- c("nzv", "corr", "center", "scale")
 cat("Learned preprocessing inside caret::train():", 
     paste(model_preprocess, collapse = ", "), "\n")
+```
+```{r}
+cat("Outcome distribution:\n")
+print(table(dat$dx))
+
+cat("Missing values:\n")
+print(sum(is.na(dat)))
+
+cat("Non-numeric columns (should only be dx):\n")
+print(sapply(dat, class))
+```
+```{r}
+cat("\nStructure check:\n")
+str(dat)
+
+cat("\nAny non-numeric predictors?\n")
+print(sapply(dat[-1], class) |> unique())
 ```
 
 
@@ -134,8 +154,6 @@ saveRDS(model_list, file = output_file)
 
 cat("\nSuccess: Trained models saved to results/model_results.rds\n")
 cat("Model Training Phase Complete.\n")
-
-sink()
 ```
 
 #' 03_Model_Evaluation.R
@@ -183,17 +201,29 @@ perf_glmnet <- fix_perf_types(model_list$glmnet$performance)
 perf_rf <- fix_perf_types(model_list$rf$performance)
 
 combined_perf <- bind_rows(perf_glmnet, perf_rf)
+
+colnames(combined_perf) <- tolower(colnames(combined_perf))
 ```
 
 ```{r}
-cat("\nStep 1: Comparative Performance Table\n")
-# Note: In mikropml, 'Mean_F1' might be named 'F1' depending on the version.
-# Let's check for F1 or Mean_F1 dynamically.
-f1_col <- if ("Mean_F1" %in% names(combined_perf)) "Mean_F1" else "F1"
-print(combined_perf %>% select(method, AUC, prAUC, Accuracy, !!sym(f1_col)))
+names(combined_perf)
+str(combined_perf)
+```
 
-# Save table to results
-write.csv(combined_perf, file.path(results_dir, "performance_comparison.csv"), row.names = FALSE)
+
+```{r}
+cat("\nStep 1: Comparative Performance Table\n")
+
+f1_col <- if ("mean_f1" %in% names(combined_perf)) "mean_f1" else "f1"
+
+print(
+  combined_perf %>%
+    dplyr::select(method, cv_metric_auc, accuracy, !!sym(f1_col))
+)
+
+write.csv(combined_perf,
+          file.path(results_dir, "performance_comparison.csv"),
+          row.names = FALSE)
 ```
 
 ```{r}
@@ -201,7 +231,7 @@ write.csv(combined_perf, file.path(results_dir, "performance_comparison.csv"), r
 cat("\nStep 2: Generating performance comparison plots...\n")
 
 perf_long <- combined_perf %>%
-  select(method, AUC, prAUC, Accuracy, !!sym(f1_col)) %>%
+  select(method, cv_metric_auc, accuracy, !!sym(f1_col)) %>% #prAUC,
   pivot_longer(-method, names_to = "metric", values_to = "value")
 
 p_comp <- ggplot(perf_long, aes(x = method, y = value, fill = method)) +
@@ -265,10 +295,5 @@ p_prc <- combined_curves %>%
        y = "Precision")
 
 ggsave(file.path(figures_dir, "prc_curve.png"), p_prc, width = 6, height = 6)
-
-cat("\nSuccess: Evaluation tables and figures saved to results/ and figures/\n")
-cat("Model Evaluation Phase Complete.\n")
-
-sink()
 ```
 

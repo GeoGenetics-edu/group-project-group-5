@@ -16,92 +16,38 @@ output: html_document
 ```{r}
 library(dplyr)
 library(janitor)
-```
-
-```{r Load configuration and dependencies}
-source(file.path(base_dir, "config.R"))
-
-otu <- read.delim(
-  file.path(data_dir, "otu_table.xls"),
-  sep = "\t",
-  header = TRUE,
-  check.names = FALSE
-)
-metadata <- read.delim(
-  file.path(data_dir, "sample_data.xls"),
-  sep = "\t",
-  header = TRUE,
-  check.names = FALSE
-)
-```
-
-
-```{r Ensure output directories exist before logging or saving artifacts}
-dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(logs_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(figures_dir, recursive = TRUE, showWarnings = FALSE)
-```
-
-
-```{r Setup Logging and Seed}
 library(tibble)
+```
 
-otu <- otu %>%
-  column_to_rownames("featureid")
+```{r}
+otu_raw <- read.delim(file.path(data_dir, "otu_table.xls"),
+                      sep = "\t", header = TRUE, check.names = FALSE)
 
-otu <- as.data.frame(t(otu))
+metadata <- read.delim(file.path(data_dir, "sample_data.xls"),
+                       sep = "\t", header = TRUE, check.names = FALSE)
+
+colnames(metadata)[colnames(metadata) == "#SampleID"] <- "sample_id"
+metadata$sample_id <- trimws(metadata$sample_id)
+
+otu <- otu_raw %>%
+  tibble::column_to_rownames("featureid") %>%
+  t() %>%
+  as.data.frame()
+
 otu$sample_id <- rownames(otu)
 
+dat <- dplyr::inner_join(metadata, otu, by = "sample_id")
+
+# define outcome ONCE
+dat$dx <- factor(dat$Disease.MESH.ID)
+dat$dx <- factor(dat$dx, levels = c("D003093", "D006262"))
+
+# remove leakage columns ONCE
+dat <- dat %>%
+  dplyr::select(-sample_id, -Disease.MESH.ID, -Disease.name)
+
+saveRDS(dat, file.path(results_dir, "prepared_data_final.rds"))
+
+table(dat$dx)
 ```
 
-```{r}
-head(otu)
-```
-
-
-# 1. Cleaning Names and Columns
-# Novice Tip: Special characters or spaces in column names can break R functions.
-# We use janitor::clean_names() to ensure all headers are snake_case and ASCII-safe.
-```{r}
-cleaned_data <- metadata %>%
-  inner_join(otu, by = "feature_id")
-```
-
-```{r}
-cleaned_data$dx <- as.factor(cleaned_data$dx)
-```
-
-
-# 2. Standardizing Feature Data Types
-# Novice Tip: Models require numeric inputs. We ensure all OTU columns are numeric.
-# In this example dataset they already are, but we apply this as a best practice.
-# We leave dx as character because mikropml handles outcome conversion internally.
-```{r}
-cleaned_data <- cleaned_data %>%
-  janitor::clean_names()
-
-cleaned_data <- cleaned_data %>%
-  mutate(across(-SampleID, as.numeric))
-```
-
-
-# Summary of changes
-```{r}
-cat("\n--- Preprocessing Summary ---\n")
-cat("Sample count:", nrow(cleaned_data), "\n")
-cat("Feature count:", ncol(cleaned_data) - 1, "\n")
-cat("Outcome counts:\n")
-print(table(cleaned_data$dx))
-```
-
-
-# Save intermediate output
-```{r}
-output_file <- file.path(results_dir, "prepared_data.rds")
-saveRDS(cleaned_data, file = output_file)
-
-cat("\nSuccess: Prepared data saved to results/prepared_data.rds\n")
-cat("Data Preparation Phase Complete.\n")
-
-sink()
-```
