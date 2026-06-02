@@ -2,33 +2,31 @@
 title: "00_preparation"
 output: html_document
 ---
-
-#' 01_Data_Preparation.R
-#' 
-#' This script performs initial data cleaning for microbial metagenomics 
-#' machine learning analysis. It covers the first phase of the lab practical:
-#' Data Preparation.
-#'
-#' Steps:
-#' 1. Cleaning Names and Columns
-#' 2. Standardizing Feature Data Types
-#' 3. Saving a prepared dataset for leakage-safe model training
+Importing the libraries
 ```{r}
 library(dplyr)
 library(janitor)
 library(tibble)
 ```
 
+Loading the two datasets
 ```{r}
 otu_raw <- read.delim(file.path(data_dir, "otu_table.xls"),
                       sep = "\t", header = TRUE, check.names = FALSE)
 
 metadata <- read.delim(file.path(data_dir, "sample_data.xls"),
                        sep = "\t", header = TRUE, check.names = FALSE)
+```
 
+Renaming the metadata column for easier handling and trimming
+```{r}
 colnames(metadata)[colnames(metadata) == "#SampleID"] <- "sample_id"
-metadata$sample_id <- trimws(metadata$sample_id)
 
+metadata$sample_id <- trimws(metadata$sample_id)
+```
+
+Filtering the otu data and joining with the metadata
+```{r}
 otu <- otu_raw %>%
   tibble::column_to_rownames("featureid") %>%
   t() %>%
@@ -37,17 +35,21 @@ otu <- otu_raw %>%
 otu$sample_id <- rownames(otu)
 
 dat <- dplyr::inner_join(metadata, otu, by = "sample_id")
+```
 
-# define outcome ONCE
+Creating a dx column with the health status column and removing the unnecessary metadata
+```{r}
 dat$dx <- factor(dat$Disease.MESH.ID)
 dat$dx <- factor(dat$dx, levels = c("D003093", "D006262"))
 
-# remove leakage columns ONCE
 dat <- dat %>%
   dplyr::select(-sample_id, -Disease.MESH.ID, -Disease.name)
 
-saveRDS(dat, file.path(results_dir, "prepared_data_final.rds"))
-
 table(dat$dx)
+```
+
+Saving the prepared data to the data folder
+```{r}
+saveRDS(dat, file.path(data_dir, "prepared_data_final.rds"))
 ```
 
