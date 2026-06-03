@@ -13,29 +13,25 @@ library(tidyr)
 
 Loading the preprocessed dataset and filtering
 ```{r}
-input_file <- file.path(data_dir, "prepared_data_final.rds")
-dat <- readRDS(input_file)
+seed = 42
 
-# outcome first
+dat <- readRDS("C:/Users/bruge/Documents/group-project-group-5/project/data/prepared_data_final.rds")
+
 dat$dx <- factor(dat$dx)
 
-# keep only the OTU columns (numeric features)
 otu_cols <- grep("^\\d|^OTU|^err|^srr", names(dat), value = TRUE)
 
 dat <- dat %>%
   select(dx, all_of(otu_cols))
 
-# force numeric safety
 dat <- dat %>%
   mutate(across(-dx, as.numeric))
 
-# remove NA rows
 dat <- na.omit(dat)
 
 table(dat$dx)
 ```
-
-...
+Preprocessing
 ```{r}
 model_preprocess <- c("nzv", "corr", "center", "scale")
 ```
@@ -58,11 +54,10 @@ results_glmnet <- run_ml(
   seed = seed,
   preProcess = model_preprocess,
   cv_times = 10,
-  tune_length = 20
+  tune_length = 10
 )
 
 results_glmnet$performance
-```
 ```
 
 Random Forest
@@ -73,17 +68,18 @@ results_rf <- run_ml(
   outcome_colname = "dx",
   seed = seed,
   preProcess = model_preprocess,
-  cv_times = 50 # Reduced for the tutorial run
+  cv_times = 10,
+  tune_length = 10
 )
 ```
 
 Checking the resutls
 ```{r}
-cat("\n--- Training Results Summary ---\n")
-cat("GLMNET Performance (Internal CV AUC):", results_glmnet$performance$cv_metric_AUC, "\n")
-cat("GLMNET Performance (Test Set AUC):", results_glmnet$performance$AUC, "\n")
-cat("\nRF Performance (Internal CV AUC):", results_rf$performance$cv_metric_AUC, "\n")
-cat("RF Performance (Test Set AUC):", results_rf$performance$AUC, "\n")
+cat("\n Training Results Summary \n")
+cat("GLMNET CV AUC:", results_glmnet$performance$cv_metric_AUC, "\n")
+cat("GLMNET Accuracy:", results_glmnet$performance$Accuracy, "\n")
+cat("\nRF CV AUC:", results_rf$performance$cv_metric_AUC, "\n")
+cat("RF Accuracy:", results_rf$performance$Accuracy, "\n")
 ```
 
 Combining the results...
@@ -110,14 +106,14 @@ Selecting the needed results for comparison
 ```{r}
 print(
   combined_perf %>%
-  select(method, cv_metric_auc, accuracy, mean_f1)
+  select(method, cv_metric_auc, accuracy)
 )
 ```
 
 Combining the results for comparison
 ```{r}
 perf_long <- combined_perf %>%
-  select(method, cv_metric_auc, accuracy, mean_f1) %>% #prAUC,
+  select(method, cv_metric_auc, accuracy) %>% #prAUC,
   pivot_longer(-method, names_to = "metric", values_to = "value")
 
 p_comp <- ggplot(perf_long, aes(x = method, y = value, fill = method)) +

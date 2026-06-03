@@ -2,61 +2,87 @@
 title: "00_preparation"
 output: html_document
 ---
-Importing the libraries
+
+Loading the libraries
 ```{r}
+library(phyloseq)
 library(dplyr)
-library(janitor)
 library(tibble)
 ```
 
-Loading the two datasets
+Loading the phyloseq object
 ```{r}
-otu_raw <- read.delim(file.path(data_dir, "otu_table.xls"),
-                      sep = "\t", header = TRUE, check.names = FALSE)
+file_path <- "C:/Users/bruge/Documents/group-project-group-5/project/data/D003093_phyloseq_updated_genus.RData"
 
-metadata <- read.delim(file.path(data_dir, "sample_data.xls"),
-                       sep = "\t", header = TRUE, check.names = FALSE)
+load(file_path)
 ```
 
-Renaming the metadata column for easier handling and trimming
+Cleaning the data
 ```{r}
-colnames(metadata)[colnames(metadata) == "#SampleID"] <- "sample_id"
+otu <- as.matrix(otu_table(ps))
 
-metadata$sample_id <- trimws(metadata$sample_id)
-```
+if (taxa_are_rows(ps)) {
+  otu <- t(otu)
+}
 
-Filtering the otu data and joining with the metadata
-```{r}
-otu <- otu_raw %>%
-  tibble::column_to_rownames("featureid") %>%
-  t() %>%
-  as.data.frame()
-
+otu <- as.data.frame(otu)
+otu[] <- lapply(otu, as.numeric)
 otu$sample_id <- rownames(otu)
-
-dat <- dplyr::inner_join(metadata, otu, by = "sample_id")
-
-# Remove Denmark samples
-dat <- dat %>%
-  filter(Country != "Denmark")
 ```
 
-Creating a dx column with the health status column and removing the unnecessary metadata
+Removing phyloseq class
+```{r}
+meta <- sample_data(ps)
+meta <- data.frame(meta)
+meta$sample_id <- rownames(meta)
+```
+
+Joining the metadata and otu
+```{r}
+dat <- dplyr::inner_join(meta, otu, by = "sample_id")
+
+# safety check
+stopifnot(is.data.frame(dat))
+```
+
+Defining the outcome variables
 ```{r}
 dat$dx <- factor(dat$Disease.MESH.ID)
-dat$dx <- factor(dat$dx, levels = c("D003093", "D006262"))
+dat$dx <- droplevels(dat$dx)
+```
 
-dat$Country <- as.factor(dat$Country)
-dat$Country <- as.numeric(dat$Country)
+Removing metadata columns (and denmark)
+```{r}
+# For removing denmark from the dataset
+#dat <- dat %>%
+  #dplyr::filter(Country != "Denmark")
 
 dat <- dat %>%
   dplyr::select(-sample_id, -Disease.MESH.ID, -Disease.name)
-
-table(dat$dx)
 ```
 
-Saving the prepared data to the data folder
+Sanity check
 ```{r}
-saveRDS(dat, file.path(data_dir, "prepared_data_ndkwc.rds"))
+cat("Dimensions:\n")
+print(dim(dat))
+
+cat("\nOutcome distribution:\n")
+print(table(dat$dx))
+
+cat("\nClass check (ALL SHOULD BE numeric except dx):\n")
+print(sapply(dat, class))
+
+cat("\nMissing values:\n")
+print(sum(is.na(dat)))
+```
+
+
+```{r}
+output_final <- "C:/Users/bruge/Documents/group-project-group-5/project/data/prepared_data_final.rds"
+saveRDS(dat, output_final)
+
+# For prepared data with denmark
+#output_ndk <- "C:/Users/bruge/Documents/group-project-group-5/project/data/prepared_data_ndk.rds"
+#saveRDS(dat, output_ndk)
 ```
 
