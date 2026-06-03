@@ -57,8 +57,12 @@ results_glmnet <- run_ml(
   outcome_colname = "dx",
   seed = seed,
   preProcess = model_preprocess,
-  cv_times = 2 # Change cross validation?
+  cv_times = 10,
+  tune_length = 20
 )
+
+results_glmnet$performance
+```
 ```
 
 Random Forest
@@ -69,7 +73,7 @@ results_rf <- run_ml(
   outcome_colname = "dx",
   seed = seed,
   preProcess = model_preprocess,
-  cv_times = 2 # Reduced for the tutorial run
+  cv_times = 50 # Reduced for the tutorial run
 )
 ```
 
