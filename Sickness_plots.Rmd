@@ -81,7 +81,7 @@ plot_ordination(ps_rel, ord_bc, color = "Disease.MESH.ID") +
     title = "PCoA: Ulcerative Colitis based divided by country",
     subtitle = "Divided by geography and healthstatus (MESH ID)",
     color = "Status",
-    caption = "Global Model: PERMANOVA p = 0.001\nGlobal Dispersion (Disease Status): p < 0.001"
+    caption = "Disease effect controlled for geography (Global Model):\nPERMANOVA p = 0.001\nGlobal Sickness Dispersion p < 0.001"
   )
 
 ```
