@@ -1,0 +1,166 @@
+---
+title: "sickness_plot"
+output: html_document
+date: "2026-05-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(phyloseq)
+library(vegan)
+library(dplyr)
+library(tibble)
+library(purrr)
+library(stringr)
+library(ggplot2)
+library(tidyverse)
+library(ggh4x)
+library(lme4)
+library(lmerTest)
+library(broom.mixed)
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("microbiome")
+library(microbiome)
+
+library(biomformat)
+```
+```{r}
+load("/Users/Mathilde/Desktop/D003093_Colitis,_Ulcerative/D003093_phyloseq_updated_genus.RData")
+```
+
+
+```{r}
+
+ps <- pylsq
+
+ps_rel <- transform_sample_counts(ps, function(x) x / sum(x))
+
+# (PCoA-plot)
+
+ord_bc <- ordinate(ps_rel, method = "PCoA", distance = "bray")
+
+plot_ordination(ps_rel, ord_bc, color = "Country") +
+  geom_point(size = 1, alpha = 0.7) +
+  theme_minimal() +
+  labs(
+    title = "PCoA: Geographical differences in microbiomes",
+    subtitle = "Based on Bray-Curtis differences (Genus-level)",
+    color = "Land",
+    caption = "Global PERMANOVA: R² = 12.5%, p = 0.001\nGlobal Dispersion (Country): p < 0.001"
+  )
+```
+
+```{r}
+# PCoA - health status by country 
+
+ord_bc <- ordinate(ps_rel, method = "PCoA", distance = "bray")
+
+plot_ordination(ps_rel, ord_bc, color = "Disease.MESH.ID") +
+  geom_point(size = 1, alpha = 0.7) +
+  facet_wrap(~Country) +
+  theme_bw() +
+  scale_color_manual(
+    values = c("D003093" = "#E41A1C", "D006262" = "#377EB8"),
+    labels = c("D003093" = "Ulcerative Colitis", "D006262" = "Healthy Control")
+  ) +
+  labs(
+    title = "PCoA: Ulcerative Colitis based divided by country",
+    subtitle = "Divided by geography and healthstatus (MESH ID)",
+    color = "Status",
+    caption = "Disease effect controlled for geography (Global Model):\nPERMANOVA p = 0.001\nGlobal Sickness Dispersion p < 0.001"
+  )
+
+```
+
+```{r}
+top20_genera <- names(sort(taxa_sums(ps_rel), decreasing = TRUE)[1:20])
+ps_top20 <- prune_taxa(top20_genera, ps_rel)
+
+plot_bar(ps_top20, fill = "Genus") +
+  geom_bar(stat="identity", color=NA) +  
+  facet_grid(Disease.name ~ Country, scales = "free_x") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(), 
+        legend.position = "bottom") +
+  labs(x = "Patienter / Testpersoner", y = "Relativ overflod (Procent)",
+       title = "Top 20 dominating genuses",
+       subtitle = "Divided by country (columns) and healthstatus (rows)")
+```
+
+```{r}
+# sick vs healthy 
+ps %>% 
+  sample_data() %>% 
+  group_by(Country, Disease.MESH.ID) %>%
+  count(Country, Disease.MESH.ID)
+```
+```{r}
+ps %>%
+  sample_data() %>%
+  group_by(Country) %>%
+  summarise(count = n())
+  
+```
+```{r}
+ps %>% 
+  sample_data() %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = Country, fill = Country)) +
+  geom_bar() +
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5) + 
+  theme_bw() +
+  labs(x = "Land", y = "Number of testpersons", 
+       title = "Distribution of the study's test subjects") +
+  theme(legend.position = "none")
+```
+```{r}
+
+# removing N/A
+ps_global_clean <- prune_samples(sample_sums(ps_rel) > 0, ps_rel)
+ps_global_clean <- prune_taxa(taxa_sums(ps_global_clean) > 0, ps_global_clean)
+
+# data for global test
+bray_dist_global <- distance(ps_global_clean, method = "bray")
+bakterie_global  <- as(otu_table(ps_global_clean), "matrix")
+if(taxa_are_rows(ps_global_clean)) { bakterie_global <- t(bakterie_global) }
+metadata_global  <- data.frame(as(sample_data(ps_global_clean), "data.frame"))
+
+# Global PERMANOVA
+permanova_global <- adonis2(bakterie_global ~ Country + Disease.MESH.ID, 
+                            data = metadata_global, 
+                            method = "bray")
+
+print("--- GLOBAL PERMANOVA TEST ---")
+print(permanova_global)
+
+# Global Betadisper 
+print("--- GLOBAL DISPERSION TEST: COUNTRY ---")
+disp_global_country <- betadisper(bray_dist_global, metadata_global$Country, type = "centroid")
+print(anova(disp_global_country))
+
+print("--- GLOBAL DISPERSION TEST: DISEASE ---")
+disp_global_disease <- betadisper(bray_dist_global, metadata_global$Disease.MESH.ID, type = "centroid")
+print(anova(disp_global_disease))
+
+
+```
+
+
+
+
+
+

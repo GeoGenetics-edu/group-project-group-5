@@ -1,0 +1,237 @@
+---
+title: "sickness_plot"
+output: html_document
+date: "2026-05-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(phyloseq)
+library(vegan)
+library(dplyr)
+library(tibble)
+library(purrr)
+library(stringr)
+library(ggplot2)
+library(tidyverse)
+library(ggh4x)
+library(lme4)
+library(lmerTest)
+library(broom.mixed)
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("microbiome")
+library(microbiome)
+
+library(biomformat)
+```
+```{r}
+
+# Indlæs den færdige RData-fil (husk at stien skal passe til, hvor den ligger på din Mac)
+load("/Users/Mathilde/group-project-group-5/project/data/D003093_Colitis,_Ulcerative/genus/phyloseq.RData")
+```
+
+
+```{r}
+
+# 1. Fortæl R at bruge dit rigtige objekt (pylsq), men kalde det 'ps'
+ps <- pylsq
+
+# 2. Transformér til relativ overflod (procent) til brug i graferne
+ps_rel <- transform_sample_counts(ps, function(x) x / sum(x))
+
+
+# ------------------------------------------------------------------------------
+# TRIN 1: Det geografiske overblik (PCoA-plot)
+# ------------------------------------------------------------------------------
+ord_bc <- ordinate(ps_rel, method = "PCoA", distance = "bray")
+
+plot_ordination(ps_rel, ord_bc, color = "Country") +
+  geom_point(size = 1, alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "PCoA: Geographical differences in microbiomes",
+       subtitle = "Based on Bray-Curtis differences(Genus-level)",
+       color = "Land")
+```
+
+```{r}
+# ------------------------------------------------------------------------------
+# TRIN 2: Sygdom vs. Sundhed opdelt på lande
+# ------------------------------------------------------------------------------
+ord_bc <- ordinate(ps_rel, method = "PCoA", distance = "bray")
+
+
+# Plot med MESH ID som farve og den manuelle farveskala, der oversætter koderne
+plot_ordination(ps_rel, ord_bc, color = "Disease.MESH.ID") +
+  geom_point(size = 3, alpha = 0.7) +
+  facet_wrap(~Country) +
+  theme_bw() +
+  scale_color_manual(
+    values = c("D003093" = "#E41A1C", "D006262" = "#377EB8"),
+    labels = c("D003093" = "Ulcerative Colitis", "D006262" = "Healthy Control")
+  ) +
+  labs(title = "PCoA: Ulcerative Colitis based divided by country",
+       subtitle = "Divided by geography and healthstatus (MESH ID)",
+       color = "Status")
+```
+```{r}
+# 1. Filtrér data, så vi KUN beholder de syge (D003093)
+ps_kun_syge <- subset_samples(ps_rel, Disease.MESH.ID == "D003093")
+
+# 2. Beregn den nye ordination (PCoA) udelukkende på de syge patienter
+ord_syge <- ordinate(ps_kun_syge, method = "PCoA", distance = "bray")
+
+# 3. Lav plottet (Da der kun er data fra USA tilbage, farver vi f.eks. efter køn eller alder, 
+# eller beholder Country for at vise, at kun USA er tilbage)
+plot_ordination(ps_kun_syge, ord_syge, color = "Sex") +
+  geom_point(size = 3, alpha = 0.7) +
+  theme_bw() +
+  labs(title = "PCoA: Kun syge patienter (Ulcerative Colitis)",
+       subtitle = "Bemærk: Danmark er ikke vist, da kohorten kun indeholder raske",
+       color = "Køn")
+```
+
+
+
+```{r}
+top20_genera <- names(sort(taxa_sums(ps_rel), decreasing = TRUE)[1:20])
+ps_top20 <- prune_taxa(top20_genera, ps_rel)
+
+plot_bar(ps_top20, fill = "Genus") +
+  geom_bar(stat="identity", color=NA) +  
+  facet_grid(Disease.name ~ Country, scales = "free_x") +
+  theme_bw() +
+  theme(axis.text.x = element_blank(), 
+        legend.position = "bottom") +
+  labs(x = "Patienter / Testpersoner", y = "Relativ overflod (Procent)",
+       title = "Top 20 dominating genuses",
+       subtitle = "Divided by country (columns) and healthstatus (rows)")
+```
+
+```{r}
+# Tæl hvor mange raske/syge der er i hvert land
+ps %>% 
+  sample_data() %>% 
+  group_by(Country, Disease.MESH.ID) %>%
+  count(Country, Disease.MESH.ID)
+```
+```{r}
+ps %>%
+  sample_data() %>%
+  group_by(Country) %>%
+  summarise(count = n())
+  
+```
+```{r}
+# Lav et søjlediagram over antal testpersoner per land med den rettede vjust-funktion
+ps %>% 
+  sample_data() %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = Country, fill = Country)) +
+  geom_bar() +
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5) + 
+  theme_bw() +
+  labs(x = "Land", y = "Number of testpersons", 
+       title = "Distribution of the study's test subjects") +
+  theme(legend.position = "none")
+```
+```{r}
+# ==============================================================================
+# STATISTISK TEST: PERMANOVA & BETADISPER (RETTET & SKUDSIKKER VERSION)
+# ==============================================================================
+
+# --- 1. GLOBALE ANALYSER (Hele datasættet) ---
+
+# Rens for tomme prøver og tomme bakterieslægter globalt
+ps_global_clean <- prune_samples(sample_sums(ps_rel) > 0, ps_rel)
+ps_global_clean <- prune_taxa(taxa_sums(ps_global_clean) > 0, ps_global_clean)
+
+# Træk data ud til global test
+bray_dist_global <- distance(ps_global_clean, method = "bray")
+bakterie_global  <- as(otu_table(ps_global_clean), "matrix")
+if(taxa_are_rows(ps_global_clean)) { bakterie_global <- t(bakterie_global) }
+metadata_global  <- data.frame(as(sample_data(ps_global_clean), "data.frame"))
+
+# Kør Global PERMANOVA
+permanova_global <- adonis2(bakterie_global ~ Country + Disease.MESH.ID, 
+                            data = metadata_global, 
+                            method = "bray")
+
+print("--- GLOBAL PERMANOVA TEST ---")
+print(permanova_global)
+
+# Kør Global Betadisper (med type = "centroid" for at undgå 'out of bounds' fejl)
+print("--- GLOBAL DISPERSION TEST: COUNTRY ---")
+disp_global_country <- betadisper(bray_dist_global, metadata_global$Country, type = "centroid")
+print(anova(disp_global_country))
+
+print("--- GLOBAL DISPERSION TEST: DISEASE ---")
+disp_global_disease <- betadisper(bray_dist_global, metadata_global$Disease.MESH.ID, type = "centroid")
+print(anova(disp_global_disease))
+
+
+```
+
+```{r}
+# ------------------------------------------------------------------------------
+# --- TEST 1: GLOBAL TEST (Hele datasættet) ---
+# ------------------------------------------------------------------------------
+permanova_global <- adonis2(bakterie_global ~ Country + Disease.MESH.ID, 
+                            data = metadata_global, 
+                            method = "bray")
+
+print("--- GLOBAL PERMANOVA TEST ---")
+print(permanova_global)
+
+print("--- GLOBAL DISPERSION TEST: COUNTRY ---")
+disp_global_country <- betadisper(bray_dist_global, metadata_global$Country)
+print(anova(disp_global_country))
+
+print("--- GLOBAL DISPERSION TEST: DISEASE ---")
+disp_global_disease <- betadisper(bray_dist_global, metadata_global$Disease.MESH.ID)
+print(anova(disp_global_disease))
+
+```
+
+
+```{r}
+# ==============================================================================
+# STATISTISK TEST: PERMANOVA (RETTET VERSION)
+# ==============================================================================
+
+# 1. Træk bakterie-matrixen ud og vend den korrekt
+bakterie_matrix <- as(otu_table(ps_rel), "matrix")
+if(taxa_are_rows(ps_rel)) {
+  bakterie_matrix <- t(bakterie_matrix)
+}
+
+# 2. Skudsikker konvertering af metadata til rent data.frame
+metadata_stat <- data.frame(as(sample_data(ps_rel), "data.frame"))
+
+
+# --- TEST 1: GLOBAL TEST (Hele datasættet) ---
+# Tjekker om geografi (Country) og sygdom (Disease.MESH.ID) er signifikante
+permanova_global <- adonis2(bakterie_matrix ~ Country + Disease.MESH.ID, 
+                            data = metadata_stat, 
+                            method = "bray")
+
+print("--- GLOBAL PERMANOVA TEST ---")
+print(permanova_global)
+
+```
+
+
+

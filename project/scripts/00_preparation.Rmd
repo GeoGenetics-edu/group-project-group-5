@@ -1,0 +1,88 @@
+---
+title: "00_preparation"
+output: html_document
+---
+
+Loading the libraries
+```{r}
+library(phyloseq)
+library(dplyr)
+library(tibble)
+```
+
+Loading the phyloseq object
+```{r}
+file_path <- "C:/Users/bruge/Documents/group-project-group-5/project/data/D003093_phyloseq_updated_genus.RData"
+
+load(file_path)
+```
+
+Cleaning the data
+```{r}
+otu <- as.matrix(otu_table(ps))
+
+if (taxa_are_rows(ps)) {
+  otu <- t(otu)
+}
+
+otu <- as.data.frame(otu)
+otu[] <- lapply(otu, as.numeric)
+otu$sample_id <- rownames(otu)
+```
+
+Removing phyloseq class
+```{r}
+meta <- sample_data(ps)
+meta <- data.frame(meta)
+meta$sample_id <- rownames(meta)
+```
+
+Joining the metadata and otu
+```{r}
+dat <- dplyr::inner_join(meta, otu, by = "sample_id")
+
+# safety check
+stopifnot(is.data.frame(dat))
+```
+
+Defining the outcome variables
+```{r}
+dat$dx <- factor(dat$Disease.MESH.ID)
+dat$dx <- droplevels(dat$dx)
+```
+
+Removing metadata columns (and denmark)
+```{r}
+# For removing denmark from the dataset
+#dat <- dat %>%
+  #dplyr::filter(Country != "Denmark")
+
+dat <- dat %>%
+  dplyr::select(-sample_id, -Disease.MESH.ID, -Disease.name)
+```
+
+Sanity check
+```{r}
+cat("Dimensions:\n")
+print(dim(dat))
+
+cat("\nOutcome distribution:\n")
+print(table(dat$dx))
+
+cat("\nClass check (ALL SHOULD BE numeric except dx):\n")
+print(sapply(dat, class))
+
+cat("\nMissing values:\n")
+print(sum(is.na(dat)))
+```
+
+
+```{r}
+output_final <- "C:/Users/bruge/Documents/group-project-group-5/project/data/prepared_data_final.rds"
+saveRDS(dat, output_final)
+
+# For prepared data with denmark
+#output_ndk <- "C:/Users/bruge/Documents/group-project-group-5/project/data/prepared_data_ndk.rds"
+#saveRDS(dat, output_ndk)
+```
+

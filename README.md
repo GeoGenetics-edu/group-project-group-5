@@ -4,10 +4,10 @@
 
 | Member | KU-ID |
 |--------|-------|
-| _Name_ | _abc123_ |
-| _Name_ | _abc123_ |
-| _Name_ | _abc123_ |
-| _Name_ | _abc123_ |
+| Emma | vwf908 |
+| Mathilde | nsq452 |
+| Morten | abc1231!!!!!!! |
+| Olivia | rvw283 |
 
 ## Links
 
